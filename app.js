@@ -73,18 +73,19 @@
       '<span class="arrow" aria-hidden="true">→</span></a></li>';
   }
 
-  function subscribeBlock(lib, startLesson) {
+  function subscribeBlock(lib, startLesson, startSlug) {
     var opts = '';
-    if (startLesson) opts += '<option value="' + esc(startLesson.id) + '" selected>This lesson: ' + esc(startLesson.passage) + '</option>';
-    if (lib) opts += lib.series.map(function (s, i) {
-      return '<option value="' + esc(s.slug) + '"' + (!startLesson && i === 0 ? ' selected' : '') + '>' + (s.order < 900 ? esc(s.order) + '. ' : '') + esc(s.title) + ' (' + s.lessons.length + ')</option>';
+    if (startLesson) opts += '<option value="' + esc(startLesson.id) + '" selected>From this lesson: ' + esc(startLesson.passage) + ' (' + esc(startLesson.series) + ')</option>';
+    if (lib) opts += lib.series.filter(function (s) { return s.order < 1000; }).map(function (s, i) {
+      var sel = !startLesson && (startSlug ? s.slug === startSlug : i === 0);
+      return '<option value="' + esc(s.slug) + '"' + (sel ? ' selected' : '') + '>' + (s.order < 900 ? esc(s.order) + '. ' : '') + esc(s.title) + ' (' + s.lessons.length + ' lessons)</option>';
     }).join('');
     return '<section class="card subscribe" id="subscribe">' +
       '<div><span class="eyebrow">Free reading plan by email</span><h2>Work through the outlines at your own pace</h2>' +
-      '<p>Pick where to begin and how often. You’ll get one outline at a time, in order through the library, one a day or one a week. Your first lesson arrives as soon as you confirm.</p></div>' +
+      '<p>Choose a series and how often. You’ll get its outlines one at a time, in order, one a day or one a week. Your first lesson arrives as soon as you confirm. When you finish a series, we’ll invite you to pick your next one.</p></div>' +
       '<form class="sub-form" novalidate>' +
       '<input type="email" name="email" placeholder="you@example.com" autocomplete="email" required aria-label="Email address">' +
-      '<label class="field"><span>Start with</span><select name="start">' + opts + '</select></label>' +
+      '<label class="field"><span>Reading plan</span><select name="start">' + opts + '</select></label>' +
       '<div class="freq">' +
       '<label><input type="radio" name="frequency" value="weekly" checked>Weekly<small>One outline each week</small></label>' +
       '<label><input type="radio" name="frequency" value="daily">Daily<small>One outline each morning</small></label>' +
@@ -216,7 +217,7 @@
         '<aside class="side">' +
         (pn ? '<div class="card pn"><h4>In this series</h4>' + pn + '</div>' : '') +
         '<div class="card"><h4>Use this lesson</h4><button class="btn ghost block" id="print">Print outline</button></div>' +
-        '<div class="card"><h4>Reading plan</h4><p style="margin:0 0 12px;font-size:14px" class="muted">Get the outlines by email, starting here, one a day or one a week.</p><a class="btn block" href="#/subscribe/' + esc(d.id) + '">Start from this lesson</a></div>' +
+        '<div class="card"><h4>Reading plan</h4><p style="margin:0 0 12px;font-size:14px" class="muted">Read the rest of this series by email, starting here, one a day or one a week.</p><a class="btn block" href="#/subscribe/' + esc(d.id) + '">Start from this lesson</a></div>' +
         '</aside></div>';
       document.getElementById('print').addEventListener('click', function () { window.print(); });
       // Warm the cache for the next lesson.
@@ -229,8 +230,9 @@
     loading();
     getLibrary().then(function (lib) {
       var startLesson = startId ? allLessons(lib).filter(function (l) { return l.id === startId; })[0] : null;
+      var startSlug = !startLesson && startId ? startId : '';
       app.innerHTML = '<div class="page-head"><div class="crumbs"><a href="#/">Library</a> › Reading plan</div><h1>Outlines by email</h1>' +
-        '<p>Free, and you can unsubscribe with one click from any email.</p></div>' + subscribeBlock(lib, startLesson);
+        '<p>Free, and you can unsubscribe with one click from any email.</p></div>' + subscribeBlock(lib, startLesson, startSlug);
       app.querySelector('.subscribe').style.marginTop = '0';
       wireSubscribe();
       var input = app.querySelector('input[type=email]');
@@ -255,7 +257,7 @@
       '<p>The series run through Genesis, the history of Israel, the Minor Prophets, the Gospels, and the Epistles. New lessons appear here automatically as they’re written.</p>' +
       '<h2 style="font-family:var(--display);color:var(--navy);font-size:30px;margin:28px 0 8px">Public domain</h2>' +
       '<p>Everything on this site, including every lesson outline and the site itself, is released into the public domain. You are free to use, copy, print, adapt, translate and distribute it, for any purpose, without asking permission or giving credit. Where a public-domain dedication isn’t legally recognized, the <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0 1.0 Universal</a> waiver applies.</p>' +
-      '<p>To study along, <a href="#/subscribe">start a reading plan</a>: choose where to begin, and the outlines come to your inbox one at a time, daily or weekly.</p>' +
+      '<p>To study along, <a href="#/subscribe">start a reading plan</a>: choose a series, and its outlines come to your inbox one at a time, daily or weekly. When you finish, you’ll be invited to choose another.</p>' +
       '</article>';
   }
 
