@@ -191,6 +191,7 @@
       var lessons = s.lessons.slice();
       app.innerHTML = '<div class="page-head"><div class="crumbs"><a href="#/">Library</a> › Series ' + esc(s.order < 900 ? s.order : '') + '</div>' +
         '<h1>' + esc(s.title) + '</h1><p>' + lessons.length + ' lesson' + (lessons.length === 1 ? '' : 's') + '</p></div>' +
+        resourceLinks(s.slug, 'Study resources') +
         (lessons.length ? '<ul class="card lesson-list">' + lessons.map(function (l) { return lessonRow(l, false); }).join('') + '</ul>' : '<div class="card empty">No lessons yet.</div>');
       window.scrollTo(0, 0);
     }).catch(function () { errorView(); });
@@ -216,6 +217,7 @@
         '<div class="reader"><article class="card outline">' + d.html + '</article>' +
         '<aside class="side">' +
         (pn ? '<div class="card pn"><h4>In this series</h4>' + pn + '</div>' : '') +
+        resourceLinks(d.seriesSlug, 'Study resource') +
         '<div class="card"><h4>Use this lesson</h4><button class="btn ghost block" id="print">Print outline</button></div>' +
         '<div class="card"><h4>Reading plan</h4><p style="margin:0 0 12px;font-size:14px" class="muted">Read the rest of this series by email, starting here, one a day or one a week.</p><a class="btn block" href="#/subscribe/' + esc(d.id) + '">Start from this lesson</a></div>' +
         '</aside></div>';
@@ -267,6 +269,136 @@
       '</article>';
   }
 
+  /* ---------- study resources ---------- */
+  // Each resource belongs to one or more series (by slug) and is linked from that series and its lessons.
+  // Rows: [name, relation to predecessor, verdict]. Verdicts: right, evil, mixed, unknown, new.
+  var RULERS = {
+    saul: [['Saul', 'position established', 'evil']],
+    judahHebron: [['David', 'son-in-law', 'right']],
+    israelMahanaim: [['Ishbosheth', 'son', '?']],
+    united: [['David', 'son-in-law', 'right'], ['Solomon', 'son', 'good to bad']],
+    // Divided kingdom: rows line up roughly by who reigned at the same time.
+    divided: [
+      [['Rehoboam', 'son', 'evil'], ['Jeroboam', 'civil servant', 'evil']],
+      [['Abijam', 'son', 'evil'], null],
+      [['Asa', 'son', 'right'], ['Nadab', 'son', 'evil']],
+      [null, ['Baasha', 'captain', 'evil']],
+      [null, ['Elah', 'son', 'evil']],
+      [null, ['Zimri', 'captain', 'evil']],
+      [null, ['Omri', 'captain', 'evil']],
+      [['Jehoshaphat', 'son', 'right'], ['Ahab', 'son', 'evil']],
+      [null, ['Ahaziah', 'son', 'evil']],
+      [['Jehoram', 'son', 'evil'], ['Jehoram', 'brother', 'evil']],
+      [['Ahaziah', 'son', 'evil'], null],
+      [['Athaliah', 'mother', 'evil'], ['Jehu', 'captain', 'mixed']],
+      [['Jehoash', 'grandson', 'good to bad'], ['Jehoahaz', 'son', 'evil']],
+      [['Amaziah', 'son', 'good to bad'], ['Jehoash', 'son', 'evil']],
+      [['Uzziah', 'son', 'right'], ['Jeroboam II', 'son', 'evil']],
+      [null, ['Zachariah', 'son', 'evil']],
+      [null, ['Shallum', 'captain (?)', 'evil']],
+      [null, ['Menahem', 'colleague', 'evil']],
+      [null, ['Pekahiah', 'son', 'evil']],
+      [['Jotham', 'son', 'right'], ['Pekah', 'captain', 'evil']],
+      [['Ahaz', 'son', 'evil'], null],
+      [['Hezekiah', 'son', 'right'], ['Hoshea', 'captain', 'evil']],
+      [['Manasseh', 'son', 'evil'], 'Assyrian captivity|“Lost tribes of Israel”'],
+      [['Amon', 'son', 'evil'], null],
+      [['Josiah', 'son', 'right'], null],
+      [['Jehoahaz', 'son', 'evil'], null],
+      [['Jehoiakim', 'elder brother', 'evil'], null],
+      [['Jehoiachin', 'son', 'evil'], null],
+      [['Zedekiah', 'uncle', 'evil'], null],
+      ['Babylonian captivity|', null]
+    ],
+    after: [
+      ['Yehud Medinata (“Province of Judah”)', 'Achaemenid (Persian) Empire'],
+      ['Judea governorate', 'Coele-Syria'],
+      ['Judea governorate', 'Kingdom of Macedonia'],
+      ['Hasmonean dynasty of Judea', 'Seleucid (Greek) Empire'],
+      ['Hasmonean dynasty of Judea', 'Roman Republic'],
+      ['Hasmonean dynasty of Judea', 'Parthian Empire'],
+      ['Herodian Kingdom of Judea', 'Roman Republic'],
+      ['Herodian Tetrarchy', 'Roman Empire']
+    ]
+  };
+
+  var RESOURCES = {
+    'rulers-of-israel': {
+      title: 'Rulers of Israel, from Saul to the Incarnation',
+      blurb: 'A chart of every king of Israel and Judah: how each came to the throne and how Scripture judges his reign.',
+      series: ['the-kingdoms-of-israel'],
+      render: rulersChart
+    }
+  };
+
+  function resourcesFor(slug) {
+    return Object.keys(RESOURCES).filter(function (k) { return RESOURCES[k].series.indexOf(slug) >= 0; })
+      .map(function (k) { var r = RESOURCES[k]; return { id: k, title: r.title, blurb: r.blurb, series: r.series }; });
+  }
+
+  function verdictPill(v) {
+    var cls = v === 'right' ? 'v-right' : v === 'evil' ? 'v-evil' : v === '?' ? 'v-unknown' : v === 'position established' ? 'v-new' : 'v-mixed';
+    var label = v === 'right' ? 'did right' : v === 'evil' ? 'did evil' : v;
+    return '<span class="verdict ' + cls + '">' + esc(label) + '</span>';
+  }
+  function rulerCell(r) {
+    if (!r) return '<td class="gap"></td>';
+    if (typeof r === 'string') {
+      var p = r.split('|');
+      return '<td class="era"><strong>' + esc(p[0]) + '</strong>' + (p[1] ? '<span>' + esc(p[1]) + '</span>' : '') + '</td>';
+    }
+    return '<td><span class="ruler">' + esc(r[0]) + '</span><span class="rel">' + esc(r[1]) + '</span>' + verdictPill(r[2]) + '</td>';
+  }
+  function rulerList(title, place, rows) {
+    return '<div class="kingdom"><h3>' + esc(title) + ' <small>' + esc(place) + '</small></h3><table class="rulers"><tbody>' +
+      rows.map(function (r) { return '<tr>' + rulerCell(r) + '</tr>'; }).join('') + '</tbody></table></div>';
+  }
+  function rulersChart() {
+    var R = RULERS;
+    return '<p class="chart-note">Under each name: how the ruler was related to the one before him, and Scripture’s verdict on his reign.</p>' +
+      '<div class="legend">' + verdictPill('right') + verdictPill('evil') + verdictPill('good to bad') + verdictPill('?') + '</div>' +
+      '<h2 class="chart-h">1. The first king</h2>' +
+      '<div class="kingdoms one">' + rulerList('Kingdom of Israel', 'Gibeah', R.saul) + '</div>' +
+      '<h2 class="chart-h">2. A kingdom divided after Saul</h2>' +
+      '<div class="kingdoms two">' + rulerList('Kingdom of Judah', 'Hebron', R.judahHebron) + rulerList('Kingdom of Israel', 'Mahanaim', R.israelMahanaim) + '</div>' +
+      '<h2 class="chart-h">3. The united kingdom</h2>' +
+      '<div class="kingdoms one">' + rulerList('United Kingdom of Israel', 'Jerusalem', R.united) + '</div>' +
+      '<h2 class="chart-h">4. The divided kingdom</h2>' +
+      '<p class="chart-note">Rulers on the same row reigned at about the same time.</p>' +
+      '<div class="table-wrap"><table class="rulers parallel"><thead><tr><th>Kingdom of Judah <small>Jerusalem</small></th><th>Kingdom of Israel <small>Samaria, etc.</small></th></tr></thead><tbody>' +
+      R.divided.map(function (row) { return '<tr>' + rulerCell(row[0]) + rulerCell(row[1]) + '</tr>'; }).join('') +
+      '</tbody></table></div>' +
+      '<h2 class="chart-h">5. After the exile, to the Incarnation</h2>' +
+      '<ol class="eras">' + R.after.map(function (e) { return '<li><strong>' + esc(e[0]) + '</strong><span>' + esc(e[1]) + '</span></li>'; }).join('') + '</ol>';
+  }
+
+  function resourceView(id) {
+    var r = RESOURCES[id];
+    setNav('');
+    if (!r) return errorView('That resource wasn’t found.');
+    setTitle(r.title);
+    var crumbs = '<a href="#/">Library</a>';
+    getLibrary().then(function (lib) {
+      var s = lib.series.filter(function (x) { return r.series.indexOf(x.slug) >= 0; })[0];
+      var c = document.getElementById('res-crumbs');
+      if (s && c) c.innerHTML = crumbs + ' › <a href="#/series/' + esc(s.slug) + '">' + esc(s.title) + '</a> › Study resource';
+    }).catch(function () {});
+    app.innerHTML = '<div class="page-head"><div class="crumbs" id="res-crumbs">' + crumbs + ' › Study resource</div>' +
+      '<h1>' + esc(r.title) + '</h1><p>' + esc(r.blurb) + '</p></div>' +
+      '<article class="card resource">' + r.render() +
+      '<p class="no-print" style="margin-top:28px"><button class="btn ghost" id="print">Print chart</button></p></article>';
+    document.getElementById('print').addEventListener('click', function () { window.print(); });
+    window.scrollTo(0, 0);
+  }
+
+  function resourceLinks(slug, heading) {
+    var rs = resourcesFor(slug);
+    if (!rs.length) return '';
+    return '<div class="card resources-card"><h4>' + esc(heading) + '</h4>' + rs.map(function (r) {
+      return '<a class="resource-link" href="#/resource/' + esc(r.id) + '"><strong>' + esc(r.title) + '</strong><span>' + esc(r.blurb) + '</span></a>';
+    }).join('') + '</div>';
+  }
+
   /* ---------- router ---------- */
   function route() {
     var h = location.hash.replace(/^#\/?/, '');
@@ -277,6 +409,7 @@
       case 'lesson': return lessonView(parts[1]);
       case 'subscribe': return subscribeView(parts[1]);
       case 'about': return aboutView();
+      case 'resource': return resourceView(parts[1]);
       case 'confirm': return tokenView('confirm', parts[1] || '');
       case 'unsubscribe': return tokenView('unsubscribe', parts[1] || '');
       default: return homeView();
