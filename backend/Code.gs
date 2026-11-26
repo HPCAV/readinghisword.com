@@ -6,7 +6,8 @@
  *   2. Serves the library and rendered lesson outlines to the website as JSON.
  *      Only documents inside the lessons folder can ever be served.
  *   3. Handles email sign-up (double opt-in), confirmation and unsubscribe.
- *   4. Sends each subscriber the next outline in the library, daily or weekly, from Gmail.
+ *   4. Sends each subscriber the next outline in their chosen series, daily or weekly, and invites
+ *      them to pick a new series when they finish one.
  *
  * First-time setup: run setup() once from the editor, then deploy as a web app
  * (Execute as: Me, Who has access: Anyone).
@@ -146,12 +147,12 @@ function collectDocs_(folder, order, seriesTitle, rows, shallow) {
 function parseName_(name) {
   const d = name.match(/(\d{4})(\d{2})(\d{2})/);
   const date = d ? d[1] + '-' + d[2] + '-' + d[3] : '';
-  let passage = name;
-  const after = name.match(/\d{8}\s*[-–]\s*(.+)$/);
-  if (after) passage = after[1];
-  else passage = name.replace(/^(Copy of\s+)?Sunday School Lesson\s*[-–]?\s*/i, '');
-  passage = passage.replace(/_/g, ':').trim();
-  return { date: date, passage: passage };
+  let t = name.replace(/^(Copy of\s+)?Sunday School Lesson\s*/i, '');
+  // Drop the date wherever it sits (start, middle or end), plus placeholders like "2022????".
+  t = t.replace(/\s*[-–]?\s*(\d{8}|\d{4}\?+)\s*[-–]?\s*/g, ' - ');
+  t = t.replace(/^[\s\-–]+|[\s\-–]+$/g, '').replace(/\s+-\s+-\s+/g, ' - ');
+  t = t.replace(/_/g, ':').trim();
+  return { date: date, passage: t || name };
 }
 
 function firstLine_(id) {
@@ -401,9 +402,9 @@ function doGet(e) {
 
 /* ------------------------------------------------------------------ */
 /* Subscriptions                                                       */
-/* Each subscriber works through the library in order (series 1, 2, …; */
-/* lessons by date within a series) from a starting point they choose, */
-/* one outline per email, daily or weekly.                              */
+/* A reading plan = one series, from a starting lesson to the end of   */
+/* that series, one outline per email, daily or weekly. When it ends,   */
+/* the reader is invited to choose a new plan.                          */
 /* ------------------------------------------------------------------ */
 
 const SUB_HEADERS_ = ['email', 'frequency', 'status', 'token', 'created', 'confirmed', 'pendingFrequency', 'pendingStart', 'lastConfirmSent', 'startLessonId', 'lastLessonId', 'nextDue', 'sentCount'];
@@ -445,7 +446,7 @@ function subscribe_(p) {
     writeRow_(sh, row);
 
     const link = CONFIG.SITE_URL + '/#/confirm/' + row.token;
-    const what = (freq === 'daily' ? 'one outline a day' : 'one outline a week') + ', starting with <strong>' + escapeHtml_(start.passage) + '</strong> (' + escapeHtml_(start.series) + ')';
+    const what = (freq === 'daily' ? 'one outline a day' : 'one outline a week') + ' through <strong>' + escapeHtml_(start.series) + '</strong>, starting with ' + escapeHtml_(start.passage);
     const html = emailShell_(
       '<p style="margin:0 0 16px">Please confirm your ' + CONFIG.SITE_NAME + ' reading plan: ' + what + '.</p>' +
       '<p style="margin:0 0 24px"><a href="' + link + '" style="background:#1f3a5f;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;display:inline-block">Confirm and send my first lesson</a></p>' +
@@ -474,7 +475,7 @@ function confirm_(token) {
     const sh = subscribersSheet_();
     const row = readRows_(sh).find(function (r) { return r.token === token; });
     if (!row) return { ok: false, error: 'That confirmation link isn’t valid.' };
-    if (!row.pendingStart && row.status === 'active') {
+    if (!row.pendingStart && row.status !== 'pending') {
       return { ok: true, message: 'Your reading plan is already active.' };
     }
     row.status = 'active';
@@ -493,7 +494,7 @@ function confirm_(token) {
     return {
       ok: true, frequency: row.frequency,
       message: 'You’re subscribed: one outline ' + (row.frequency === 'daily' ? 'a day' : 'a week') +
-        (start ? ', starting with ' + start.passage : '') + '. ' +
+        (start ? ' through ' + start.series + ', starting with ' + start.passage : '') + '. ' +
         (sentNow ? 'Your first lesson is on its way now.' : 'Your first lesson will arrive tomorrow morning.'),
     };
   } finally {
@@ -548,9 +549,25 @@ function sendScheduled_() {
   });
 }
 
-/** Sends the subscriber's next lesson, if there is one. Returns true if an email went out. */
+/** The series a lesson belongs to, and whether lessons are still being added to it (it holds the newest dated lesson). */
+function seriesInfo_(rows, seriesName) {
+  let newest = null;
+  rows.forEach(function (r) { if (r.date && (!newest || r.date > newest.date)) newest = r; });
+  return { name: seriesName, ongoing: !!newest && newest.series === seriesName };
+}
+
+/**
+ * Sends the subscriber's next lesson in their plan's series. When the series is finished,
+ * sends a "choose your next plan" email instead and marks the plan completed
+ * (unless the series is still being written, in which case they wait for new lessons).
+ * Returns true if an email went out.
+ */
 function sendNext_(sh, row, renderedCache) {
   const rows = getIndex_();
+  const start = rows.find(function (r) { return r.id === row.startLessonId; });
+  if (!start) return false;
+  const series = seriesInfo_(rows, start.series);
+
   let idx;
   if (row.lastLessonId) {
     const last = rows.findIndex(function (r) { return r.id === row.lastLessonId; });
@@ -558,31 +575,79 @@ function sendNext_(sh, row, renderedCache) {
   } else {
     idx = rows.findIndex(function (r) { return r.id === row.startLessonId; });
   }
-  if (idx < 0 || idx >= rows.length) return false; // caught up; waits for new lessons
+  if (idx < 0) return false;
   if (MailApp.getRemainingDailyQuota() < 1) return false;
 
   const lesson = rows[idx];
+  if (!lesson || lesson.series !== series.name) {
+    if (series.ongoing) return false; // caught up; new lessons will come as they're added
+    sendCompletion_(row, series.name, rows);
+    row.status = 'completed';
+    row.nextDue = '';
+    writeRow_(sh, row);
+    return true;
+  }
+
   const r = renderedCache[lesson.id] || (renderedCache[lesson.id] = renderDoc_(lesson.id));
   const n = Number(row.sentCount || 0) + 1;
+  const inSeries = rows.filter(function (x) { return x.series === series.name; });
+  const pos = inSeries.findIndex(function (x) { return x.id === lesson.id; }) + 1;
   const subject = lesson.passage + (lesson.heading ? ' — ' + lesson.heading : '');
-  const nextUp = rows[idx + 1];
-  const intro = '<p style="margin:0 0 6px;color:#8a6d3b;font-size:13px;letter-spacing:.08em;text-transform:uppercase">' + escapeHtml_(lesson.series) + ' · Lesson ' + n + ' of your reading plan</p>' +
+  const nextUp = rows[idx + 1] && rows[idx + 1].series === series.name ? rows[idx + 1] : null;
+  const when = row.frequency === 'daily' ? 'tomorrow' : 'next week';
+
+  const intro = '<p style="margin:0 0 6px;color:#8a6d3b;font-size:13px;letter-spacing:.08em;text-transform:uppercase">' + escapeHtml_(series.name) + ' · Lesson ' + pos + ' of ' + inSeries.length + '</p>' +
     '<p style="margin:0 0 20px"><a href="' + lessonUrl_(lesson.id) + '" style="color:#1f3a5f">Read this lesson on ' + CONFIG.SITE_NAME + '</a></p>';
-  const outro = nextUp
-    ? '<p style="margin:24px 0 0;color:#6b6358;font-size:14px">Next ' + (row.frequency === 'daily' ? 'tomorrow' : 'week') + ': ' + escapeHtml_(nextUp.passage) + (nextUp.series !== lesson.series ? ' (' + escapeHtml_(nextUp.series) + ')' : '') + '</p>'
-    : '<p style="margin:24px 0 0;color:#6b6358;font-size:14px">You’ve reached the newest lesson in the library. New outlines will come to you as they’re added.</p>';
-  const footer = 'You’re getting one outline ' + (row.frequency === 'daily' ? 'a day' : 'a week') + '. ' +
-    '<a href="' + CONFIG.SITE_URL + '/#/subscribe" style="color:#6b6358">Change your plan</a> · ' +
-    '<a href="' + CONFIG.SITE_URL + '/#/unsubscribe/' + row.token + '" style="color:#6b6358">Unsubscribe</a>';
+  let outro;
+  if (nextUp) outro = 'Next ' + when + ': ' + escapeHtml_(nextUp.passage);
+  else if (series.ongoing) outro = 'You’re caught up with the newest lesson in ' + escapeHtml_(series.name) + '. New outlines will come to you as they’re written.';
+  else outro = 'That’s the last lesson in ' + escapeHtml_(series.name) + '. ' + (row.frequency === 'daily' ? 'Tomorrow' : 'Next week') + ' you’ll get a note inviting you to choose your next reading plan.';
+  outro = '<p style="margin:24px 0 0;color:#6b6358;font-size:14px">' + outro + '</p>';
 
   MailApp.sendEmail({ to: row.email, subject: subject, name: CONFIG.SITE_NAME,
-    htmlBody: emailShell_(intro + '<div style="font-family:Georgia,serif;font-size:16px;line-height:1.55">' + r.full + '</div>' + outro, footer) });
+    htmlBody: emailShell_(intro + '<div style="font-family:Georgia,serif;font-size:16px;line-height:1.55">' + r.full + '</div>' + outro, planFooter_(row)) });
 
   row.lastLessonId = lesson.id;
   row.sentCount = String(n);
   row.nextDue = addDays_(today_(), row.frequency === 'daily' ? 1 : 7);
   writeRow_(sh, row);
   return true;
+}
+
+function sendCompletion_(row, finishedSeries, rows) {
+  const seen = {};
+  const series = [];
+  rows.forEach(function (r) {
+    if (seen[r.series]) { seen[r.series].count++; return; }
+    seen[r.series] = { title: r.series, order: Number(r.seriesOrder), count: 1 };
+    series.push(seen[r.series]);
+  });
+  const done = seen[finishedSeries];
+  const others = series.filter(function (x) { return x.title !== finishedSeries && x.order < 1000; });
+  // Suggest the series that comes next in the library, wrapping around.
+  const suggestion = others.find(function (x) { return done && x.order > done.order; }) || others[0];
+
+  const btn = function (href, label) { return '<a href="' + href + '" style="background:#1f3a5f;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;display:inline-block">' + label + '</a>'; };
+  let html = '<p style="margin:0 0 6px;color:#8a6d3b;font-size:13px;letter-spacing:.08em;text-transform:uppercase">Reading plan complete</p>' +
+    '<p style="margin:0 0 14px;font-size:22px;color:#1f3a5f">You’ve finished ' + escapeHtml_(finishedSeries) + '.</p>' +
+    '<p style="margin:0 0 20px">Well done. Every lesson in the series has come your way' + (done ? ', all ' + done.count : '') + '. Would you like to keep going with another series?</p>';
+  if (suggestion) {
+    html += '<p style="margin:0 0 24px">' + btn(CONFIG.SITE_URL + '/#/subscribe/' + slug_(suggestion.title), 'Start ' + escapeHtml_(suggestion.title)) + '</p>';
+  }
+  html += '<p style="margin:0 0 8px">Or choose any series:</p><ul style="margin:0 0 20px;padding-left:20px">' +
+    others.map(function (x) {
+      return '<li style="margin:4px 0"><a href="' + CONFIG.SITE_URL + '/#/subscribe/' + slug_(x.title) + '" style="color:#1f3a5f">' + escapeHtml_(x.title) + '</a> <span style="color:#6b6358">(' + x.count + ' lessons)</span></li>';
+    }).join('') + '</ul>' +
+    '<p style="margin:0;color:#6b6358;font-size:14px">If you’d rather stop here, there’s nothing to do. No more emails will come unless you start a new plan.</p>';
+
+  MailApp.sendEmail({ to: row.email, subject: 'You finished ' + finishedSeries + '. Choose your next reading plan', name: CONFIG.SITE_NAME,
+    htmlBody: emailShell_(html, 'You received this because you finished a ' + CONFIG.SITE_NAME + ' reading plan.') });
+}
+
+function planFooter_(row) {
+  return 'You’re getting one outline ' + (row.frequency === 'daily' ? 'a day' : 'a week') + '. ' +
+    '<a href="' + CONFIG.SITE_URL + '/#/subscribe" style="color:#6b6358">Change your plan</a> · ' +
+    '<a href="' + CONFIG.SITE_URL + '/#/unsubscribe/' + row.token + '" style="color:#6b6358">Unsubscribe</a>';
 }
 
 function emailShell_(inner, footer) {
