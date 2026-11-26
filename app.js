@@ -8,7 +8,6 @@
   var lessonCache = {};
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-  document.getElementById('year').textContent = new Date().getFullYear();
 
   /* ---------- helpers ---------- */
   function esc(s) {
@@ -254,6 +253,8 @@
     app.innerHTML = '<article class="card prose"><h1>About</h1>' +
       '<p>Reading His Word is a library of Sunday School lesson outlines written for an adult class at Southview Baptist Church in Lincoln, Nebraska. Each outline works through a passage verse by verse, noting the verse references along the way, with occasional Hebrew and Greek word studies and cross-references.</p>' +
       '<p>The series run through Genesis, the history of Israel, the Minor Prophets, the Gospels, and the Epistles. New lessons appear here automatically as they’re written.</p>' +
+      '<h2 style="font-family:var(--display);color:var(--navy);font-size:30px;margin:28px 0 8px">Public domain</h2>' +
+      '<p>Everything on this site, including every lesson outline and the site itself, is released into the public domain. You are free to use, copy, print, adapt, translate and distribute it, for any purpose, without asking permission or giving credit. Where a public-domain dedication isn’t legally recognized, the <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0 1.0 Universal</a> waiver applies.</p>' +
       '<p>To study along, <a href="#/subscribe">start a reading plan</a>: choose where to begin, and the outlines come to your inbox one at a time, daily or weekly.</p>' +
       '</article>';
   }
