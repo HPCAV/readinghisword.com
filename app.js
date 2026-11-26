@@ -255,9 +255,15 @@
     app.innerHTML = '<article class="card prose"><h1>About</h1>' +
       '<p>Reading His Word is a library of Sunday School lesson outlines written for an adult class at Southview Baptist Church in Lincoln, Nebraska. Each outline works through a passage verse by verse, noting the verse references along the way, with occasional Hebrew and Greek word studies and cross-references.</p>' +
       '<p>The series run through Genesis, the history of Israel, the Minor Prophets, the Gospels, and the Epistles. New lessons appear here automatically as they’re written.</p>' +
-      '<h2 style="font-family:var(--display);color:var(--navy);font-size:30px;margin:28px 0 8px">Public domain</h2>' +
-      '<p>Everything on this site, including every lesson outline and the site itself, is released into the public domain. You are free to use, copy, print, adapt, translate and distribute it, for any purpose, without asking permission or giving credit. Where a public-domain dedication isn’t legally recognized, the <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0 1.0 Universal</a> waiver applies.</p>' +
       '<p>To study along, <a href="#/subscribe">start a reading plan</a>: choose a series, and its outlines come to your inbox one at a time, daily or weekly. When you finish, you’ll be invited to choose another.</p>' +
+      '<h2 class="about-h">About the author</h2>' +
+      '<div class="author"><img src="dick-clark.jpg" alt="Dick Clark" width="220" height="220">' +
+      '<div><p><strong>Dick Clark</strong> trusted Christ as his Savior on January 27, 1986, shortly before his fifth birthday. He grew up in Slidell, Louisiana, the oldest of five sons of two New Orleans Baptist Theological Seminary graduates who raised their children to be active in the life of the church.</p>' +
+      '<p>His first ministry was playing violin for special music at a small country church, and music has remained part of his service ever since. For years he and his family led monthly worship services for the residents of a Lincoln nursing and rehabilitation center.</p>' +
+      '<p>At Southview Baptist Church he served as a deacon, led the church’s safety and security ministry, and taught an adult Sunday School class. The outlines in this library come from that class, and he continues to write them each week. He is a co-author of <em>Faith Seeking Freedom</em> (Libertarian Christian Institute).</p>' +
+      '<p>Dick and his wife have been married nearly nineteen years and have three children.</p></div></div>' +
+      '<h2 class="about-h">Public domain</h2>' +
+      '<p>Everything on this site, including every lesson outline and the site itself, is released into the public domain. You are free to use, copy, print, adapt, translate and distribute it, for any purpose, without asking permission or giving credit. Where a public-domain dedication isn’t legally recognized, the <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0 1.0 Universal</a> waiver applies.</p>' +
       '</article>';
   }
 
