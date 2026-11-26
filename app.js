@@ -127,7 +127,7 @@
       var current = lib.series[0];
 
       var html = '<section class="hero">' +
-        '<div class="hero-text"><span class="eyebrow">Sunday School lesson outlines</span>' +
+        '<div class="hero-text"><span class="eyebrow">Free to read · Free to share · Public domain</span>' +
         '<h1>Reading His Word,<br>verse by verse</h1>' +
         '<p>A growing library of Bible study outlines that walk through Scripture one verse at a time, with the original-language notes and cross-references used in class.</p>' +
         '<a class="btn" href="#/subscribe">Get the outlines by email</a></div>';
