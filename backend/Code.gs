@@ -81,6 +81,7 @@ function rebuildIndex() {
   const seriesFolders = root.getFolders();
   while (seriesFolders.hasNext()) {
     const f = seriesFolders.next();
+    if (isHiddenFolder_(f.getName())) continue;
     const m = f.getName().match(/^\s*(\d+)\s*[.)-]?\s*(.+)$/);
     const order = m ? Number(m[1]) : 999;
     const title = m ? m[2].trim() : f.getName();
@@ -141,7 +142,16 @@ function collectDocs_(folder, order, seriesTitle, rows, shallow) {
   }
   if (shallow) return;
   const subs = folder.getFolders();
-  while (subs.hasNext()) collectDocs_(subs.next(), order, seriesTitle, rows);
+  while (subs.hasNext()) {
+    const sub = subs.next();
+    if (isHiddenFolder_(sub.getName())) continue; // e.g. "Drafts": kept in Drive, never shown on the site
+    collectDocs_(sub, order, seriesTitle, rows);
+  }
+}
+
+/** Folders named "Drafts", "Archive", "Hidden", or starting with "_" are skipped. */
+function isHiddenFolder_(name) {
+  return /^\s*(_|drafts?\b|archive\b|hidden\b|not for site\b)/i.test(name);
 }
 
 function parseName_(name) {
