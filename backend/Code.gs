@@ -149,9 +149,9 @@ function collectDocs_(folder, order, seriesTitle, rows, shallow) {
   }
 }
 
-/** Folders named "Drafts", "Archive", "Hidden", or starting with "_" are skipped. */
+/** Folders named "Drafts", "Archive", "Hidden", "Resources", or starting with "_" are skipped. */
 function isHiddenFolder_(name) {
-  return /^\s*(_|drafts?\b|archive\b|hidden\b|not for site\b)/i.test(name);
+  return /^\s*(_|drafts?\b|archive\b|hidden\b|resources?\b|not for site\b)/i.test(name);
 }
 
 function parseName_(name) {
