@@ -74,18 +74,24 @@
       '<span class="arrow" aria-hidden="true">→</span></a></li>';
   }
 
-  function subscribeBlock() {
+  function subscribeBlock(lib, startLesson) {
+    var opts = '';
+    if (startLesson) opts += '<option value="' + esc(startLesson.id) + '" selected>This lesson: ' + esc(startLesson.passage) + '</option>';
+    if (lib) opts += lib.series.map(function (s, i) {
+      return '<option value="' + esc(s.slug) + '"' + (!startLesson && i === 0 ? ' selected' : '') + '>' + (s.order < 900 ? esc(s.order) + '. ' : '') + esc(s.title) + ' (' + s.lessons.length + ')</option>';
+    }).join('');
     return '<section class="card subscribe" id="subscribe">' +
-      '<div><span class="eyebrow">Free lesson emails</span><h2>Study along each week</h2>' +
-      '<p>Get the coming Sunday’s outline in your inbox before class, or take last Sunday’s lesson one passage a day, Monday through Saturday.</p></div>' +
+      '<div><span class="eyebrow">Free reading plan by email</span><h2>Work through the outlines at your own pace</h2>' +
+      '<p>Pick where to begin and how often. You’ll get one outline at a time, in order through the library, one a day or one a week. Your first lesson arrives as soon as you confirm.</p></div>' +
       '<form class="sub-form" novalidate>' +
       '<input type="email" name="email" placeholder="you@example.com" autocomplete="email" required aria-label="Email address">' +
+      '<label class="field"><span>Start with</span><select name="start">' + opts + '</select></label>' +
       '<div class="freq">' +
-      '<label><input type="radio" name="frequency" value="weekly" checked>Weekly<small>This Sunday’s outline, sent Friday</small></label>' +
-      '<label><input type="radio" name="frequency" value="daily">Daily<small>One passage a day, Mon–Sat</small></label>' +
+      '<label><input type="radio" name="frequency" value="weekly" checked>Weekly<small>One outline each week</small></label>' +
+      '<label><input type="radio" name="frequency" value="daily">Daily<small>One outline each morning</small></label>' +
       '</div>' +
       '<input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">' +
-      '<button class="btn" type="submit">Subscribe</button>' +
+      '<button class="btn" type="submit">Start my reading plan</button>' +
       '<div class="form-msg" role="status"></div>' +
       '</form></section>';
   }
@@ -100,14 +106,14 @@
       var email = form.email.value.trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { msg.className = 'form-msg err'; msg.textContent = 'Please enter a valid email address.'; return; }
       btn.disabled = true; btn.textContent = 'Sending…'; msg.textContent = '';
-      api({ action: 'subscribe', email: email, frequency: form.querySelector('input[name=frequency]:checked').value, website: form.website.value })
+      api({ action: 'subscribe', email: email, frequency: form.querySelector('input[name=frequency]:checked').value, start: form.start ? form.start.value : '', website: form.website.value })
         .then(function (d) {
           msg.className = 'form-msg ' + (d.ok ? 'ok' : 'err');
           msg.textContent = d.ok ? d.message : d.error;
           if (d.ok) form.email.value = '';
         })
         .catch(function () { msg.className = 'form-msg err'; msg.textContent = 'Couldn’t reach the server. Please try again.'; })
-        .then(function () { btn.disabled = false; btn.textContent = 'Subscribe'; });
+        .then(function () { btn.disabled = false; btn.textContent = 'Start my reading plan'; });
     });
   }
 
@@ -125,7 +131,7 @@
         '<div class="hero-text"><span class="eyebrow">Sunday School lesson outlines</span>' +
         '<h1>Reading His Word,<br>verse by verse</h1>' +
         '<p>A growing library of Bible study outlines that walk through Scripture one verse at a time, with the original-language notes and cross-references used in class.</p>' +
-        '<a class="btn" href="#/subscribe">Get the weekly lesson by email</a></div>';
+        '<a class="btn" href="#/subscribe">Get the outlines by email</a></div>';
       if (latest) {
         html += '<a class="card feature" href="#/lesson/' + esc(latest.id) + '">' +
           '<div><span class="badge">Latest lesson</span>' +
@@ -151,7 +157,7 @@
           '<div class="meta">' + s.lessons.length + ' lesson' + (s.lessons.length === 1 ? '' : 's') + (range ? ' · ' + range : '') + '</div></a>';
       }).join('') + '</div>';
 
-      html += subscribeBlock();
+      html += subscribeBlock(lib);
       app.innerHTML = html;
       wireSubscribe();
 
@@ -211,7 +217,7 @@
         '<aside class="side">' +
         (pn ? '<div class="card pn"><h4>In this series</h4>' + pn + '</div>' : '') +
         '<div class="card"><h4>Use this lesson</h4><button class="btn ghost block" id="print">Print outline</button></div>' +
-        '<div class="card"><h4>Weekly email</h4><p style="margin:0 0 12px;font-size:14px" class="muted">Get each new outline before Sunday.</p><a class="btn block" href="#/subscribe">Subscribe</a></div>' +
+        '<div class="card"><h4>Reading plan</h4><p style="margin:0 0 12px;font-size:14px" class="muted">Get the outlines by email, starting here, one a day or one a week.</p><a class="btn block" href="#/subscribe/' + esc(d.id) + '">Start from this lesson</a></div>' +
         '</aside></div>';
       document.getElementById('print').addEventListener('click', function () { window.print(); });
       // Warm the cache for the next lesson.
@@ -219,14 +225,18 @@
     }).catch(function () { errorView('That lesson couldn’t be loaded right now. Please try again in a moment.'); });
   }
 
-  function subscribeView() {
-    setTitle('Subscribe'); setNav('subscribe');
-    app.innerHTML = '<div class="page-head"><div class="crumbs"><a href="#/">Library</a> › Subscribe</div><h1>Lesson emails</h1>' +
-      '<p>Free, and you can unsubscribe with one click from any email.</p></div>' + subscribeBlock();
-    app.querySelector('.subscribe').style.marginTop = '0';
-    wireSubscribe();
-    var input = app.querySelector('input[type=email]');
-    if (input) input.focus();
+  function subscribeView(startId) {
+    setTitle('Reading plan'); setNav('subscribe');
+    loading();
+    getLibrary().then(function (lib) {
+      var startLesson = startId ? allLessons(lib).filter(function (l) { return l.id === startId; })[0] : null;
+      app.innerHTML = '<div class="page-head"><div class="crumbs"><a href="#/">Library</a> › Reading plan</div><h1>Outlines by email</h1>' +
+        '<p>Free, and you can unsubscribe with one click from any email.</p></div>' + subscribeBlock(lib, startLesson);
+      app.querySelector('.subscribe').style.marginTop = '0';
+      wireSubscribe();
+      var input = app.querySelector('input[type=email]');
+      if (input) input.focus();
+    }).catch(function () { errorView(); });
   }
 
   function tokenView(action, token) {
@@ -244,7 +254,7 @@
     app.innerHTML = '<article class="card prose"><h1>About</h1>' +
       '<p>Reading His Word is a library of Sunday School lesson outlines written for an adult class at Southview Baptist Church in Lincoln, Nebraska. Each outline works through a passage verse by verse, noting the verse references along the way, with occasional Hebrew and Greek word studies and cross-references.</p>' +
       '<p>The series run through Genesis, the history of Israel, the Minor Prophets, the Gospels, and the Epistles. New lessons appear here automatically as they’re written.</p>' +
-      '<p>To follow along, <a href="#/subscribe">sign up for the lesson email</a>: the coming Sunday’s outline each Friday, or last Sunday’s lesson one passage a day.</p>' +
+      '<p>To study along, <a href="#/subscribe">start a reading plan</a>: choose where to begin, and the outlines come to your inbox one at a time, daily or weekly.</p>' +
       '</article>';
   }
 
@@ -256,7 +266,7 @@
     switch (parts[0]) {
       case 'series': return seriesView(parts[1]);
       case 'lesson': return lessonView(parts[1]);
-      case 'subscribe': return subscribeView();
+      case 'subscribe': return subscribeView(parts[1]);
       case 'about': return aboutView();
       case 'confirm': return tokenView('confirm', parts[1] || '');
       case 'unsubscribe': return tokenView('unsubscribe', parts[1] || '');

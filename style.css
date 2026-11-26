@@ -128,6 +128,8 @@ main.wrap { min-height: 60vh; padding-top: 36px; padding-bottom: 56px; }
 .sub-form { display: grid; gap: 12px; }
 .sub-form input[type=email] { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: #fff; }
 .sub-form input[type=email]:focus { outline: 2px solid var(--navy-2); outline-offset: 1px; }
+.field { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.field select { padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; font: 15px var(--sans); color: var(--ink); background: #fff; }
 .freq { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .freq label { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; background: #fff; font-size: 14px; }
 .freq label:has(input:checked) { border-color: var(--navy-2); box-shadow: inset 0 0 0 1px var(--navy-2); }
